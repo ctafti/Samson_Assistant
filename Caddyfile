@@ -1,0 +1,8 @@
+{
+    admin off
+    auto_https off
+}
+
+:80 {
+    reverse_proxy windmill_server:8000
+}

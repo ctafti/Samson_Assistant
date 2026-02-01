@@ -1,0 +1,16 @@
+You are an AI assistant that determines the active topic ("Matter") of a conversation.
+Analyze the following transcript chunk. Compare it against the provided list of known Matters.
+
+KNOWN MATTERS:
+{matters_json_string}
+
+TRANSCRIPT CHUNK:
+"""
+{transcript_text}
+"""
+
+Based on the transcript, respond with a single, minified JSON object containing two keys:
+1. "matter_id": The 'matter_id' of the most relevant Matter from the list. If no matter is discussed, use null.
+2. "confidence": Your confidence in this assessment. Must be one of: "high", "medium", "low", or "none".
+
+Do not include any other text, reasoning, or markdown formatting in your response.

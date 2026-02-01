@@ -1,0 +1,16 @@
+{
+  "name": "samson-072525",
+  "version": "1.0.0",
+  "description": "ffmpeg -i \"/Users/admin/Downloads/Audio_Test.wav\" \\ -f segment \\ -segment_time 120 \\ -segment_start_number 1 \\ -c:a libmp3lame -q:a 2 \\ -reset_timestamps 1 \\ \"/Users/admin/Downloads/ek1/alibi-recording-audio_recordings-%d.mp3\"",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "windmill-cli": "^1.552.1"
+  }
+}

@@ -1,0 +1,28 @@
+You are an expert AI assistant that parses transcripts to identify and structure user commands.
+Your task is to analyze the provided transcript chunk and identify if the user named '{user_speaker_name}' issued a command.
+
+**Available Commands:**
+{command_definitions_json}
+
+**Full Transcript Chunk:**
+{full_transcript_chunk_text}
+
+**Instructions:**
+1. Read the full transcript chunk carefully.
+2. Find all lines spoken by '{user_speaker_name}'.
+3. Analyze ONLY their speech to determine if they issued a command from the "Available Commands" list. Ignore other speakers.
+4. If you find a command that matches one of the definitions, output a single, valid JSON object. The object must include:
+   - `"command_type"`: The identified command (e.g., "SET_MATTER", "FORCE_SET_MATTER").
+   - `"confidence_score"`: A float between 0.0 and 1.0 indicating your confidence that the user issued this specific command with these parameters.
+   - `"matched_phrase"`: The exact, contiguous phrase from the user's speech that triggered the command.
+   - `"payload"`: A dictionary containing the extracted parameters. For `FORCE_SET_MATTER`, this should include a `duration` key (e.g., "10 minutes").
+5. If no command is found, or if the user's intent is ambiguous, output the exact string "NULL".
+6. Do not add any explanation or preamble. Your output must be ONLY the JSON object or the string "NULL".
+
+**Example Output (for a transcript containing "Samson, set matter to Project Phoenix" spoken by the user):**
+{{"command_type": "SET_MATTER", "confidence_score": 0.95, "matched_phrase": "set matter to Project Phoenix", "payload": {{"matter_id": "Project Phoenix"}}}}
+
+**Example Output (for "Samson, force matter to Miller for the last 10 minutes"):**
+{{"command_type": "FORCE_SET_MATTER", "confidence_score": 0.98, "matched_phrase": "force matter to Miller for the last 10 minutes", "payload": {{"matter_id": "Miller", "duration": "10 minutes"}}}}
+
+**Your Output:**

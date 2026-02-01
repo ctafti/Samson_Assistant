@@ -1,0 +1,391 @@
+# Configuration for Samson AI Assistant
+
+# -----------------------------------------------------------------------------
+# PATHS
+# Define base directories for data, logs, etc.
+# These are relative to the Samson project root folder unless specified otherwise.
+# config_loader.py resolves them to absolute paths.
+# -----------------------------------------------------------------------------
+paths:
+  monitored_audio_folder: "/Users/admin/Downloads/ek1/Observed"        #"/Users/admin/Alibi"       # <<< VERIFY: Syncthing target for new audio files (e.g., data/syncthing_audio_input)
+  audio_error_folder: "data/audio_errors"   # For audio files that fail processing
+  database_folder: "data/databases"         # Where daily SQLite databases will be stored
+  log_folder: "logs"                        # For application log files
+  log_file_name: samson_orchestrator.log
+  archived_audio_folder: "data/archive"           # For processed original AAC files
+  daily_log_folder: "data/daily_logs"             # Where daily YYYY-MM-DD_samson_log.json files will be stored
+  command_queue_dir: "data/command_queue"   # For file-based command queuing
+  system_state_dir: "data/system_state"   # For persisting live state like current context.
+  windmill_shared_folder: "data/windmill_shared"
+  
+
+  temp_processing_dir: "data/temp_audio_processing" # <<< NEW: For intermediate files during audio pipeline
+
+  # --- Speaker Identification Database ---
+  speaker_db_dir: "data/speaker_database"   # <<< NEW: Stores FAISS index and speaker name map
+
+  # --- General Data Directory (Optional but useful for organizing model caches) ---
+  # If you want to group all model caches under a single 'data/models' dir:
+  # data_models_dir: "data/models" # Then other cache paths could be relative to this if config_loader handles it
+  
+  flags_queue_dir: "data/flags_queue"             # Directory to store YYYY-MM-DD_flags_queue.json files
+  flag_snippets_dir: "data/flag_snippets" # For pre-generated, secure audio snippets for flag review
+
+# -----------------------------------------------------------------------------
+# TOOLS
+# Configuration for external command-line tools.
+# -----------------------------------------------------------------------------
+tools:
+  # Path to the ffmpeg executable.
+  # If ffmpeg is in your system's PATH, "ffmpeg" should suffice.
+  # macOS (e.g., via Homebrew): "/opt/homebrew/bin/ffmpeg" or "/usr/local/bin/ffmpeg"
+  ffmpeg_path: "ffmpeg" # <<< VERIFY THIS PATH on your Mac (try `which ffmpeg` in terminal)
+
+# -----------------------------------------------------------------------------
+# STT (SPEECH-TO-TEXT Configuration)
+# Renamed from whisperx for clarity if supporting multiple STT engines
+stt:
+  engine: "parakeet_mlx"  # Options: "openai_whisper", "parakeet_mlx" Will likely fall apart if use Whisper
+
+  openai_whisper:
+    model_name_or_path: "tiny.en"
+    language: "en" # Can be null for auto-detect
+    # download_root_for_model_cache: "data/models/whisper_cache"
+
+  parakeet_mlx:
+    # Path to the Parakeet MLX model directory or Hugging Face Hub ID
+    # e.g., "mlx-community/parakeet-tdt-0.6b-v2" or a local path like "models/parakeet-tdt-custom"
+    model_path: "mlx-community/parakeet-tdt-0.6b-v2"  # MUST BE SET if parakeet_mlx is chosen
+    CLI: # Note: I've indented CLI under parakeet_mlx based on previous code structure
+        language: "en" # Language hint for Parakeet (e.g., "en", "de", "es", etc.)
+        sample_rate: 16000 # Expected sample rate by the Parakeet model
+        vad_filter: true # Whether to use VAD in Parakeet's transcribe method
+        # device: "auto" # MLX typically auto-selects device (mps or cpu). Not directly controlled here.
+
+
+# IMPORTANT: REMOVE OR COMMENT OUT THE OLD `whisperx:` SECTION to avoid confusion.
+# We'll now use `stt.openai_whisper.device` if needed, but MLX usually handles device automatically.
+# The global `device` setting might still be useful for pyannote/speechbrain.
+# Let's add a global device setting for non-STT ML models for now.
+global_ml_device: "mps" # For pyannote, speechbrain etc. (STT device handled by STT config)
+
+
+# -----------------------------------------------------------------------------
+# AUDIO PROCESSING SUITE (NoT-derived components)
+# -----------------------------------------------------------------------------
+audio_suite_settings:
+  # --- Model Names (from Hugging Face or local paths if supported by libraries) ---
+  diarization_model: "pyannote/speaker-diarization-3.1" #VERIFY (Requires accepting terms on HF)
+  embedding_model: "speechbrain/spkrec-ecapa-voxceleb"   # 
+  punctuation_model: "felflare/bert-restore-punctuation" #  or null to disable
+
+  # --- Hugging Face Token ---
+  # Required for some models like pyannote/speaker-diarization-3.1.
+  # Get from: huggingface.co/settings/tokens (needs 'read' permission).
+  # Store directly, or as an environment variable name (e.g., "ENV:HF_TOKEN_ENV").
+  # config_loader.py and audio_suite/utils.py would need logic to resolve env var if specified as name.
+  hf_token: YOUR_HUGGINGFACE_TOKEN # Example token, replace with yours or "ENV:YOUR_ENV_VAR"
+
+  # --- Paths & Filenames for Speaker DB (within paths.speaker_db_dir) ---
+  faiss_index_filename: "global_speaker_embeddings.index" # Default from NoT
+  speaker_map_filename: "global_speaker_names.json"       # Default from NoT
+
+  # --- Cache for Embedding Model ---
+  # Subdirectory name relative to `paths.data_dir` (or `PROJECT_ROOT/"data"`)
+  # e.g., if paths.data_dir is "data", this will be "data/models/embedding_cache"
+  embedding_model_cache_subdir: "embedding_cache" # <<< VERIFY
+
+  # --- Processing Parameters ---
+  similarity_threshold: 0.63  # For speaker identification (0.0 to 1.0)
+  min_segment_duration_for_embedding: 3 # Min audio (seconds) from a speaker to generate reliable embedding
+  punctuation_chunk_size: 256 # For text_processing.apply_punctuation
+  embedding_dim: 192          # Default embedding dimension (SpeechBrain ECAPA-TDNN is 192)
+
+  review_flags_max_days_lookback: 14 # How many days back to look for review flags (e.g., 14 days)
+
+
+  # Threshold for identifying a speaker. Now context-specific.
+  initial_similarity_thresholds:
+    voip: 0.85      # Stricter for clearer audio
+    in_person: 0.82 # More lenient for variable environments
+    context_match_bonus: 0.05 # Bonus added to a similarity score if the speaker's context matches the audio's context.
+  
+  # --- Diarization Consolidation ---
+  # Max gap (seconds) an UNKNOWN_SPEAKER word can be from a known speaker segment
+  # to be re-assigned to that known speaker during consolidation.
+  unknown_consolidation_max_bridge_s: 3.0
+  diarization_consolidation_min_segment_ms: 700     # Min duration for a diarized segment to be considered stable (ms)
+  diarization_consolidation_max_gap_ms: 100        # Max silence between diarized segments to consider merging short ones
+ 
+  
+  active_candidate_merge_threshold: 0.85           # Min similarity to merge a new segment into an existing active session candidate
+  min_segments_for_enroll_prompt: 1                # Min number of distinct segments for an active candidate before prompting user
+  min_duration_ms_for_enroll_prompt: 5000          # Min total audio duration (ms) for an active candidate before prompting
+  
+  enable_live_embedding_refinement: true           # Enable/disable refining enrolled speaker embeddings
+  live_refinement_min_similarity: 0.82             # Min similarity for an ID'd segment to be used for refining an enrolled speaker
+  live_refinement_min_segment_duration_s: 3.8      # Min duration of an ID'd segment to be used for refinement
+  
+  ambiguity_similarity_lower_bound: 0.60           # Min similarity for a segment to be considered a potential (even if ambiguous) match
+  ambiguity_similarity_upper_bound_for_review: 0.80 # If best match sim is below this, consider flagging
+  ambiguity_max_similarity_delta_for_multiple_matches: 0.07 # If top 2 matches' sim are within this delta, consider flagging
+  consolidate_new_speaker_threshold: 0.88        # Threshold for consolidating a new speaker if similar to an existing one
+
+  ambiguity_matter_context_bonus: 0.05        # This bonus is applied ONLY to resolve ties between high-confidence speaker candidates and is distinct from the general context bonus.
+  true_silence_reset_threshold_seconds: 90 # Max silence (in seconds) between two consecutive words before the matter context is reset.
+
+  # --- Timestamped Transcript ---
+  timestamped_transcript_interval_seconds: 600 # How often to print [HH:MM:SS] in one of the transcript formats
+  master_log_line_width: 90 # Width for master log lines (e.g., 90 characters)
+ 
+
+# -----------------------------------------------------------------------------
+# LARGE LANGUAGE MODELS (LLM) - "ollama" and "lmstudio" supported
+# -----------------------------------------------------------------------------
+llm:
+  classification_llm:
+    provider: "lmstudio"
+    base_url: "http://localhost:1234/v1"
+    model_name: "lmstudio-community/qwen3-4b-thinking-2507-mlx" # <<< VERIFY your fast Ollama model for classification
+    temperature: 0.1
+    num_gpu:  -1 # Use -1 for all layers, 0 for CPU, or e.g., 30 for 30 layers
+
+  main_llm:
+    provider: "lmstudio"
+    base_url: "http://localhost:1234/v1"
+    model_name: "lmstudio-community/qwen3-4b-thinking-2507-mlx" # <<< VERIFY your main Ollama model
+    temperature: 0.3
+    num_gpu:  -1 # Use -1 for all layers, 0 for CPU, or e.g., 30 for 30 layers
+
+  summary_llm: # New section for summarization tasks
+    provider: "lmstudio"
+    base_url: "http://localhost:1234/v1"
+    model_name: "lmstudio-community/qwen3-4b-thinking-2507-mlx" # Or a smaller/faster model
+    temperature: 0.2
+    num_gpu:  -1 # Use -1 for all layers, 0 for CPU, or e.g., 30 for 30 layers
+
+  llm_command_parser:
+    provider: "lmstudio"
+    base_url: "http://localhost:1234/v1"
+    model_name: "qwen3-4b-thinking-2507-mlx" # <<< VERIFY: Use a fast, local model for command parsing.
+    temperature: 0.1
+    disable_thinking: true
+
+  llm_task_extractor:
+    provider: "lmstudio"
+    base_url: "http://localhost:1234/v1"
+    model_name: "lmstudio-community/qwen3-4b-thinking-2507-mlx" # <<< VERIFY: Use a fast, local model for command parsing.
+    temperature: 0.1
+    disable_thinking: False
+
+  text_embedding_model:
+    provider: "sentence_transformers"
+    model_name: "BAAI/bge-large-en-v1.5"
+
+# -----------------------------------------------------------------------------
+# AI WORKFLOW GENERATOR API CALLER
+# -----------------------------------------------------------------------------
+
+# Profile to be used by the AI workflow generator feature.
+  workflow_generator_profile: "gemini_workflow_gen" # Options: "gemini_workflow_gen", "claude_workflow_gen", "lmstudio_workflow_gen"
+  profiles:
+    gemini_workflow_gen:
+      provider: "google_gemini"
+      model_name: "gemini-2.5-pro"
+      api_key: "YOUR_GOOGLE_API_KEY" # Securely loads from GOOGLE_API_KEY environment variable
+
+    claude_workflow_gen:
+      provider: "anthropic"
+      model_name: "claude-sonnet-4-5-20250929"
+      api_key: "YOUR_ANTHROPIC_API_KEY" # Securely loads from ANTHROPIC_API_KEY environment variable
+
+    lmstudio_workflow_gen:
+      provider: "lmstudio"
+      base_url: "http://localhost:1234/v1"
+      model_name: "lmstudio-community/qwen3-4b-thinking-2507-mlx" # <<< VERIFY: Use a fast, local model for command parsing.
+      temperature: 0.2
+      num_gpu: -1
+
+# -----------------------------------------------------------------------------
+# SIGNAL MESSAGING INTERFACE
+# -----------------------------------------------------------------------------
+signal:
+  samson_phone_number: "+18005550199" # <<< YOUR SAMSON BOT's SIGNAL NUMBER (+countrycode...)
+  recipient_phone_number: "+18005550100" # <<< YOUR PERSONAL SIGNAL NUMBER (+countrycode...)
+  signal_cli_path: "signal-cli" # <<< VERIFY (try `which signal-cli`)
+  signal_cli_data_path: "~/.local/share/signal-cli" # <<< VERIFY (default for signal-cli)
+  unstructured_command_prompt_path: "src/prompts/signal_command_parser_prompt.txt"
+
+# -----------------------------------------------------------------------------
+# TIMINGS AND INTERVALS
+# -----------------------------------------------------------------------------
+timings:
+  email_poll_interval_minutes: 15
+  calendar_refresh_interval_minutes: 60
+  end_of_day_summary_time: "21:00" # <<< SET YOUR PREFERRED TIME (HH:MM 24-hour format)
+  audio_processing_retry_delays_seconds: [60, 300, 900]
+
+  audio_chunk_expected_duration: "2m"         # Examples: "10m" (10 minutes), "600s" (600 seconds).
+  folder_monitor_process_delay_s: 5            # Delay to process chunk N-1 after chunk N appears
+
+
+  assumed_recording_timezone: "America/New_York"  # Timezone for initial assumption and display (e.g., "UTC", "Europe/London")
+  master_log_timestamp_format: "%b%d, %Y - %H:%M" # Python strftime format for display (e.g., Jun03, 2025 - 16:01)
+                                                 
+# -----------------------------------------------------------------------------
+# SPEAKER INTELLIGENCE
+# Settings for advanced speaker identification features, dynamic thresholds,
+# and profile evolution.
+# -----------------------------------------------------------------------------
+speaker_intelligence:
+  enable_dynamic_thresholds: true
+  dynamic_threshold_learning_rate: 0.01
+  dynamic_threshold_min_corrections: 5
+  dynamic_threshold_adjustment_frequency_hours: 24 # e.g., daily
+  dynamic_threshold_adjustment_buffer: 0.02 # Buffer to prevent rapid fluctuations in thresholds
+
+  batch_commit_inactivity_seconds: 120 # Time to wait before committing a batch of speaker segments
+  recalculation_recency_decay_rate: 0.01 # How quickly recency decays (0.0 to 1.0)
+
+  enable_llm_role_assignment: False
+  llm_role_assignment_model: null # Instructs to use main_llm or specific model if filled
+  llm_role_assignment_prompt_template: "Based on the following dialogue, what is the primary role of this speaker (e.g., Interviewer, Subject Matter Expert, Assistant, Caller, Host, Guest)? Dialogue: {dialogue_text}"
+  role_assignment_frequency_days: 14 # e.g., bi-weekly
+
+  enable_automatic_profile_recalculation: true
+  profile_recalculation_time_utc: "03:00" # 24-hour HH:MM format
+  profile_recalculation_min_new_segments_threshold: 50
+
+  profile_evolution:
+    recency_weight_enabled: true
+    recency_decay_half_life_days: 90 # How long it takes for a snippet's weight to halve
+
+
+# -----------------------------------------------------------------------------
+# VOICE COMMANDS
+# -----------------------------------------------------------------------------
+voice_commands:
+  enabled: true
+  user_speaker_name: "System Administrator" # <<< VERIFY: Change this to the exact enrolled speaker name who will give commands.
+  trigger_phrases:
+    - "samson"
+    - "just to be clear"
+    - "we are talking about"
+  llm_prompt_template_path: "src/prompts/voice_command_prompt.txt"
+  command_definitions:
+    - command: "SET_MATTER"
+      description: "Assigns the current conversation to a specific matter, case, or project."
+      examples:
+        - "We are talking about the Miller Case"
+        - "So, this is about the Miller case"
+      parameters:
+        - name: "matter_id"
+          type: "string"
+          description: "The unique identifier or name of the matter."
+          
+    - command: "FORCE_SET_MATTER"
+      description: "Immediately assigns the last N seconds of conversation to a specific matter, overriding any previous assignment. Used for real-time correction."
+      examples:
+        - "Samson, force matter to Project Phoenix."
+        - "Samson, override matter to the Miller case."
+      parameters:
+        - name: "matter_id"
+          type: "string"
+          description: "The unique identifier or name of the matter to forcibly assign."
+
+  vocal_override_lookback_seconds: 60
+  voice_command_confidence_threshold: 0.85
+    # Add other command definitions here in the future
+
+# -----------------------------------------------------------------------------
+# BACKGROUND SERVICES
+# -----------------------------------------------------------------------------
+services:
+  command_executor:
+    enabled: true
+    poll_interval_s: 5 # How often the service checks for new commands in seconds.
+
+
+# -----------------------------------------------------------------------------
+# KNOWLEDGE GRAPH
+# -----------------------------------------------------------------------------
+knowledge_graph:
+  enabled: False
+  ontology_schema_path: "config/ontology.json" # Path to the KG schema file
+  ground_truth_file: "data/entity_ground_truth.jsonl" # Path to the feedback log
+
+
+# CONTEXT MANAGEMENT
+# Settings for the ConversationalContextService, which manages the "Matter".
+# -----------------------------------------------------------------------------
+context_management:
+
+  # A list of phrases that, if detected in the user's speech, will
+  # immediately reset the context. Matching is case-insensitive and fuzzy.
+  end_of_conversation_triggers:
+    - "end conversation"
+    - "that's all"
+    - "let's wrap this up"
+    - "end of meeting"
+    - "all right, thanks everyone"
+
+
+  enable_keyword_bonus: true # Enables a bonus for matters where a specific keyword is found in the transcript.
+  keyword_bonus_value: 0.1 # The value to add to the cosine similarity score if a keyword is matched.
+  enable_matter_context_stickiness: true
+  matter_context_stickiness_bonus: 0.05
+  matter_stickiness_override_delta: 0.09
+  auto_create_matter_threshold: 0.88
+  matter_change_threshold: 3
+  matter_assignment_min_similarity: 0.75
+  new_matter_trigger_duration_s: 300
+
+  # ---Smart Flagging Thresholds ---
+  enable_matter_conflict_flagging: true
+  matter_conflict_high_confidence_threshold: 0.85 # Min score for a matter to be considered in a conflict.
+  matter_conflict_delta_threshold: 0.05 # Max difference between top 2 scores to trigger a conflict flag.
+  
+
+
+# -----------------------------------------------------------------------------
+# TASK INTELLIGENCE ENGINE
+# Settings for the proactive task extraction and management system.
+# -----------------------------------------------------------------------------
+task_intelligence:
+  enabled: true
+  task_data_file: "data/tasks/tasks.jsonl"
+  # feedback_index_path: "data/tasks/feedback_index.faiss" # Phase 2
+  # feedback_map_path: "data/tasks/feedback_map.json" # Phase 2
+  task_creation_cooldown_s: 60 # Time in seconds before a pending task is auto-confirmed                     CHANGE BEFORE DEPLOYMENT (600)
+  completion_keywords: ["done", "completed", "finished", "sent", "submitted"]
+  task_similarity_threshold: 0.80 
+
+# -----------------------------------------------------------------------------
+# WINDMILL WORKFLOW ENGINE
+# Settings for connecting to the Windmill service for workflow execution.
+# -----------------------------------------------------------------------------
+windmill:
+  enabled: true
+  workspace: samson
+  remote: "http://localhost:80"
+  base_url: "http://localhost:80"
+  execution_method: "cli"
+
+  # An API token for authentication. Generate this from the Windmill UI under
+  # User Settings -> Tokens. It is highly recommended to load this from an
+  # environment variable for security, e.g., "ENV:WMILL_TOKEN".
+  api_token: "YOUR_WINDMILL_TOKEN" # Set your token here or use an environment variable.
+
+
+
+
+# -----------------------------------------------------------------------------
+# API KEYS & CREDENTIALS (Example for referencing environment variables)
+# -----------------------------------------------------------------------------
+# api_credentials:
+#   microsoft_graph:
+#     client_id_env_var: "MS_GRAPH_CLIENT_ID"
+#     client_secret_env_var: "MS_GRAPH_CLIENT_SECRET"
+#     tenant_id_env_var: "MS_GRAPH_TENANT_ID"
+# If hf_token is an env var name like "HF_TOKEN_ENV", you'd read it from os.environ
+# hf_token_env_var_name: "MY_HF_ENV_VAR_NAME" # Example if audio_suite_settings.hf_token holds this name

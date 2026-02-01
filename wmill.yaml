@@ -1,0 +1,27 @@
+defaultTs: bun
+remotes:
+  production:
+    remote: "http://localhost:80"
+    workspace: samson
+    token: YOUR_WINDMILL_TOKEN
+includes:
+  - workflows/**
+excludes: []
+codebases: []
+skipVariables: false
+skipResources: false
+skipResourceTypes: false
+skipSecrets: true
+skipScripts: false
+skipFlows: false
+skipApps: false
+skipFolders: false
+includeSchedules: false
+includeTriggers: false
+includeUsers: false
+includeGroups: false
+includeSettings: false
+includeKey: false
+gitBranches:
+  '072525':
+    overrides: {}

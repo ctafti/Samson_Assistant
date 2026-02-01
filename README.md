@@ -117,7 +117,14 @@ Before installing Samson, ensure your system meets the following requirements:
     ./setup.sh
     ```
 
-3.  **Start Infrastructure Services**
+3.  **Configure Environment Variables**
+    Create a `.env` file in the root directory to define the required Docker variables. This is critical for the Windmill engine to locate its database.
+    ```bash
+    echo "WM_IMAGE=ghcr.io/windmill-labs/windmill:main" >> .env
+    echo "DATABASE_URL=postgres://postgres:changeme@db/windmill" >> .env
+    ```
+
+4.  **Start Infrastructure Services**
     Samson uses Docker to run the Windmill workflow engine and its database.
     ```bash
     docker-compose up -d

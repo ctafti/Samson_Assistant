@@ -90,6 +90,64 @@ The user interface is built with **Streamlit**, offering a "Human-in-the-loop" w
 *   **Signal Messenger:** A bi-directional interface allows the system to push notifications to the user's phone and receive commands remotely via a CLI bridge. It supports interactive sessions, such as reviewing flags or confirming entity resolution via chat.
 *   **Local LLM Inference:** The system abstraction layer allows it to interface with various local inference servers (e.g., LM Studio or Ollama) or cloud providers (Anthropic, Google), ensuring flexibility in model selection.
 
+## Setup
+
+### Prerequisites
+Before installing Samson, ensure your system meets the following requirements:
+* **Operating System**: macOS (Apple Silicon optimized)
+* **Python**: Version 3.11
+* **System Tools**:
+    * `ffmpeg` (Required for audio processing)
+    * `signal-cli` (Required for Signal messaging integration)
+    * `docker` & `docker-compose` (Required for the Windmill workflow engine)
+* **LLM Provider**: A local inference server like **LM Studio** or **Ollama** running and accessible (default configuration expects `http://localhost:1234/v1`).
+
+### Installation
+
+1.  **Clone the Repository**
+    ```bash
+    git clone [https://github.com/ctafti/Samson_Assistant.git](https://github.com/ctafti/Samson_Assistant.git)
+    cd Samson_Assistant
+    ```
+
+2.  **Run the Setup Script**
+    The included `setup.sh` script automates the environment initialization and installs the required Python dependencies defined in `requirements.txt`.
+    ```bash
+    chmod +x setup.sh
+    ./setup.sh
+    ```
+
+3.  **Start Infrastructure Services**
+    Samson uses Docker to run the Windmill workflow engine and its database.
+    ```bash
+    docker-compose up -d
+    ```
+
+### Configuration
+
+1.  **Locate Configuration**: Navigate to the `config/` directory. Ensure `config.yaml` exists.
+2.  **Edit Settings**: Open `config/config.yaml` and customize the following key parameters:
+    * **Paths**: Update `monitored_audio_folder` to point to the directory where your new audio files will be synced (e.g., your Syncthing target folder).
+    * **Signal**: Set the `samson_phone_number` (the bot's number) and `recipient_phone_number` (your admin number).
+    * **LLM**: Verify that the `base_url` under the `llm` section matches your local provider.
+    * **Tools**: Verify the `ffmpeg_path` and `signal_cli_path` if they are not in your system's global PATH.
+
+### Running Samson
+
+The system requires two concurrent processes to function: the backend orchestrator and the frontend user interface.
+
+**1. Start the Backend Orchestrator**
+This service monitors the file system, processes incoming audio, and executes commands.
+```bash
+python main_orchestrator.py
+```
+**1. Start the Frontend Streamlit Application**
+In a separate terminal window, start the Streamlit interface:
+```bash
+streamlit run gui.py
+```
+
+You can then access the Samson Cockpit in your browser at http://localhost:8501.
 ## Technical Stack
 
 *   **Language:** Python 3.11
